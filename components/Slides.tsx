@@ -2,7 +2,7 @@ import React, { useRef, useState, useEffect } from 'react';
 import { motion, useMotionValue, useSpring, useTransform, AnimatePresence } from 'framer-motion';
 import { ResponsiveContainer, Cell, PieChart, Pie, Tooltip as RechartsTooltip } from 'recharts';
 import { SlideProps } from '../types';
-import html2canvas from 'html2canvas';
+import { toPng } from 'html-to-image';
 
 // --- Assets & Icons ---
 const GitHubLogo = () => (
@@ -459,6 +459,40 @@ export const SummaryCardSlide: React.FC<SlideProps> = ({ data, onRestart }) => {
         setShowPalette(false);
     };
 
+    const handleDownload = async () => {
+        if (!cardRef.current) return;
+        
+        // Temporarily reset tilt for clean capture
+        const currentX = x.get();
+        const currentY = y.get();
+        x.set(0);
+        y.set(0);
+
+        // Wait for frame to update
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        try {
+            const dataUrl = await toPng(cardRef.current, {
+                quality: 1.0,
+                pixelRatio: 2,
+                cacheBust: true,
+            });
+            
+            const link = document.createElement('a');
+            link.href = dataUrl;
+            link.download = `gitwrap-${data.stats.year}-summary.png`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        } catch (error) {
+            console.error("Error downloading slide:", error);
+        } finally {
+            // Restore tilt
+            x.set(currentX);
+            y.set(currentY);
+        }
+    };
+
     function handleMouseMove(event: React.MouseEvent<HTMLDivElement>) {
         const rect = event.currentTarget.getBoundingClientRect();
         const width = rect.width;
@@ -466,7 +500,7 @@ export const SummaryCardSlide: React.FC<SlideProps> = ({ data, onRestart }) => {
         const mouseX = event.clientX - rect.left;
         const mouseY = event.clientY - rect.top;
         const xPct = (mouseX / width - 0.5) * 200; // -100 to 100
-        const yPct = (mouseY / height - 0.5) * 200;
+        const yPct = (mouseY / height - 10.5) * 200;
         x.set(xPct);
         y.set(yPct);
     }
@@ -651,16 +685,30 @@ export const SummaryCardSlide: React.FC<SlideProps> = ({ data, onRestart }) => {
           )}
         </AnimatePresence>
 
-        {/* Restart Button in Share Mode */}
+        {/* Restart Button in Share Mode */ }
         {shareMode && (
-          <motion.button
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            onClick={() => (onRestart ? onRestart() : window.location.reload())}
-            className="fixed bottom-8 right-8 z-40 w-12 h-12 bg-white/10 backdrop-blur-md text-white text-xl rounded-full hover:bg-white/20 transition-all border border-white/20 flex items-center justify-center"
-          >
-            ↻
-          </motion.button>
+          <div className="fixed bottom-8 right-8 z-40 flex gap-4">
+             <motion.button
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              onClick={handleDownload}
+              className="w-12 h-12 bg-white/10 backdrop-blur-md text-white text-xl rounded-full hover:bg-white/20 transition-all border border-white/20 flex items-center justify-center"
+              title="Download Image"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+              </svg>
+            </motion.button>
+             <motion.button
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              onClick={() => (onRestart ? onRestart() : window.location.reload())}
+              className="w-12 h-12 bg-white/10 backdrop-blur-md text-white text-xl rounded-full hover:bg-white/20 transition-all border border-white/20 flex items-center justify-center"
+              title="Restart"
+            >
+              ↻
+            </motion.button>
+          </div>
         )}
 
       </div>
