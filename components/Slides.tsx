@@ -2,7 +2,7 @@ import React, { useRef, useState, useEffect } from 'react';
 import { motion, useMotionValue, useSpring, useTransform, AnimatePresence } from 'framer-motion';
 import { ResponsiveContainer, Cell, PieChart, Pie, Tooltip as RechartsTooltip } from 'recharts';
 import { SlideProps } from '../types';
-import html2canvas from 'html2canvas';
+import { toPng } from 'html-to-image';
 
 // --- Assets & Icons ---
 const GitHubLogo = () => (
@@ -442,21 +442,48 @@ export const SummaryCardSlide: React.FC<SlideProps> = ({ data, onRestart }) => {
     const sheenX = useTransform(x, [-100, 100], [100, 0]);
     const sheenY = useTransform(y, [-100, 100], [100, 0]);
     
+    
     const cardRef = useRef<HTMLDivElement>(null);
-    const [shareMode, setShareMode] = useState(false);
-    const [showPalette, setShowPalette] = useState(false);
     const [bgColor, setBgColor] = useState('#050505');
 
     const colors = ['#050505', '#1a1a2e', '#2d1b69', '#0f3460', '#16213e', '#1f1f1f', '#2c003e', '#1a0033'];
     
-    const handleShare = () => {
-        setShareMode(true);
-        setShowPalette(true);
-    };
-
     const handleColorSelect = (color: string) => {
         setBgColor(color);
-        setShowPalette(false);
+    };
+
+    const handleDownload = async () => {
+        if (!cardRef.current) return;
+        
+        // Temporarily reset tilt for clean capture
+        const currentX = x.get();
+        const currentY = y.get();
+        x.set(0);
+        y.set(0);
+
+        // Wait for frame to update
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        try {
+            const dataUrl = await toPng(cardRef.current, {
+                quality: 1.0,
+                pixelRatio: 2,
+                cacheBust: true,
+            });
+            
+            const link = document.createElement('a');
+            link.href = dataUrl;
+            link.download = `gitwrap-${data.stats.year}-summary.png`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        } catch (error) {
+            console.error("Error downloading slide:", error);
+        } finally {
+            // Restore tilt
+            x.set(currentX);
+            y.set(currentY);
+        }
     };
 
     function handleMouseMove(event: React.MouseEvent<HTMLDivElement>) {
@@ -466,7 +493,7 @@ export const SummaryCardSlide: React.FC<SlideProps> = ({ data, onRestart }) => {
         const mouseX = event.clientX - rect.left;
         const mouseY = event.clientY - rect.top;
         const xPct = (mouseX / width - 0.5) * 200; // -100 to 100
-        const yPct = (mouseY / height - 0.5) * 200;
+        const yPct = (mouseY / height - 10.5) * 200;
         x.set(xPct);
         y.set(yPct);
     }
@@ -480,12 +507,10 @@ export const SummaryCardSlide: React.FC<SlideProps> = ({ data, onRestart }) => {
       <div className="h-screen w-full flex flex-col items-center justify-center p-4 relative overflow-hidden font-inter select-none" style={{ backgroundColor: bgColor }}>
         
         {/* Environment Lighting */}
-        {!shareMode && (
-          <>
-            <div className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] bg-white/[0.03] blur-[120px] rounded-full pointer-events-none"></div>
-            <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-blue-900/[0.05] blur-[100px] rounded-full pointer-events-none"></div>
-          </>
-        )}
+        <>
+          <div className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] bg-white/[0.03] blur-[120px] rounded-full pointer-events-none"></div>
+          <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-blue-900/[0.05] blur-[100px] rounded-full pointer-events-none"></div>
+        </>
 
         {/* 3D Stage */}
         <div 
@@ -608,60 +633,48 @@ export const SummaryCardSlide: React.FC<SlideProps> = ({ data, onRestart }) => {
         </div>
 
         {/* Action Buttons */}
-        {!shareMode && (
-          <motion.div 
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 1 }}
-              className="relative z-10 mt-8 flex gap-4"
+        <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 1 }}
+            className="relative z-10 mt-8 flex gap-4"
+        >
+          <button
+            onClick={handleDownload}
+            className="px-6 py-3 bg-white/10 backdrop-blur-md text-white text-sm font-bold tracking-wide rounded-full transition-all hover:bg-white/20 border border-white/20 shadow-lg"
           >
-            <button
-              onClick={handleShare}
-              className="px-6 py-3 bg-white/10 backdrop-blur-md text-white text-sm font-bold tracking-wide rounded-full transition-all hover:bg-white/20 border border-white/20 shadow-lg"
-            >
-              SHARE
-            </button>
-            <button
-              onClick={() => (onRestart ? onRestart() : window.location.reload())}
-              className="px-6 py-3 bg-white/10 backdrop-blur-md text-white text-sm font-bold tracking-wide rounded-full hover:bg-white/20 transition-all border border-white/20"
-            >
-              ↻
-            </button>
-          </motion.div>
-        )}
-
-        {/* Color Palette */}
-        <AnimatePresence>
-          {showPalette && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 20 }}
-              className="fixed bottom-8 left-1/2 -translate-x-1/2 z-40 flex gap-3 bg-black/80 backdrop-blur-md p-4 rounded-full border border-white/10"
-            >
-              {colors.map((color) => (
-                <button
-                  key={color}
-                  onClick={() => handleColorSelect(color)}
-                  className="w-12 h-12 rounded-full border-2 border-white/20 hover:scale-110 transition-transform"
-                  style={{ backgroundColor: color }}
-                />
-              ))}
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Restart Button in Share Mode */}
-        {shareMode && (
-          <motion.button
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
+            DOWNLOAD
+          </button>
+          <button
             onClick={() => (onRestart ? onRestart() : window.location.reload())}
-            className="fixed bottom-8 right-8 z-40 w-12 h-12 bg-white/10 backdrop-blur-md text-white text-xl rounded-full hover:bg-white/20 transition-all border border-white/20 flex items-center justify-center"
+            className="px-6 py-3 bg-white/10 backdrop-blur-md text-white text-sm font-bold tracking-wide rounded-full hover:bg-white/20 transition-all border border-white/20"
           >
             ↻
-          </motion.button>
-        )}
+          </button>
+        </motion.div>
+
+        {/* Color Palette - Minimal Style */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 1.2 }}
+          className="fixed bottom-6 right-6 z-40 flex gap-2 px-3 py-2 bg-black/20 backdrop-blur-sm rounded-full border border-white/5"
+        >
+          {colors.map((color) => (
+            <button
+              key={color}
+              onClick={() => handleColorSelect(color)}
+              className={`w-6 h-6 rounded-full border transition-all ${
+                bgColor === color 
+                  ? 'border-white/60 scale-110' 
+                  : 'border-white/10 hover:border-white/30 hover:scale-105'
+              }`}
+              style={{ backgroundColor: color }}
+              aria-label={`Background color ${color}`}
+            />
+          ))}
+        </motion.div>
+
 
       </div>
     );
